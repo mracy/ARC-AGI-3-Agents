@@ -34,22 +34,48 @@ def _install_arc_agi_if_needed() -> None:
         pass
 
     candidates = []
+
+    # 1. Exact wheel file or directory from env var
+    arc_wheel = os.environ.get("ARC_WHEEL", "").strip()
+    if arc_wheel:
+        if os.path.isfile(arc_wheel) and arc_wheel.endswith(".whl"):
+            candidates.append(arc_wheel)
+        elif os.path.isdir(arc_wheel):
+            candidates.extend(glob(f"{arc_wheel}/*.whl"))
+
+    # 2. Common Kaggle competition input path
+    kaggle_default = "/kaggle/input/arc-prize-2026-arc-agi-3"
+    if os.path.isdir(kaggle_default):
+        candidates.extend(glob(f"{kaggle_default}/arc_agi_3_wheels/*.whl"))
+        candidates.extend(glob(f"{kaggle_default}/*.whl"))
+
+    # 3. Any /kaggle/input/* location
     if os.path.isdir("/kaggle/input"):
         for d in glob("/kaggle/input/*"):
             candidates.extend(glob(f"{d}/arc_agi_3_wheels/*.whl"))
             candidates.extend(glob(f"{d}/*.whl"))
+
+    # 4. Local repo layout
     candidates.extend(glob("../arc_agi_3_wheels/*.whl"))
     candidates.extend(glob("arc_agi_3_wheels/*.whl"))
 
     if not candidates:
+        print("--- /kaggle/input contents ---")
+        if os.path.isdir("/kaggle/input"):
+            print(os.listdir("/kaggle/input"))
+            for d in glob("/kaggle/input/*"):
+                print(d, os.listdir(d) if os.path.isdir(d) else "file")
+        else:
+            print("/kaggle/input does not exist")
         raise RuntimeError(
             "arc-agi not installed and no .whl wheel found. "
-            "Upload the wheel to your Kaggle notebook inputs."
+            "Add the competition wheel as a Kaggle input, or set ARC_WHEEL "
+            "to the wheel file/directory."
         )
 
     wheel = candidates[0]
     print(f"Installing arc-agi from {wheel}")
-    subprocess.check_call([sys.executable, "-m", "pip", "install", wheel])
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "--quiet", wheel])
 
 
 _install_arc_agi_if_needed()
@@ -68,7 +94,18 @@ def _find_environments_dir() -> str:
     if env_dir and os.path.isdir(env_dir):
         return env_dir
 
-    # Kaggle input layout: /kaggle/input/<competition>/environment_files
+    # Explicit Kaggle env dir
+    arc_env = os.environ.get("ARC_ENV_DIR", "").strip()
+    if arc_env and os.path.isdir(arc_env):
+        return arc_env
+
+    # Common Kaggle competition input path
+    kaggle_default = "/kaggle/input/arc-prize-2026-arc-agi-3"
+    kaggle_env = f"{kaggle_default}/environment_files"
+    if os.path.isdir(kaggle_env):
+        return kaggle_env
+
+    # Any /kaggle/input/* location
     if os.path.isdir("/kaggle/input"):
         for d in glob("/kaggle/input/*/environment_files"):
             if os.path.isdir(d):
